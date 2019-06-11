@@ -2,6 +2,8 @@
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
+#include <BLE2902.h>
+
 #include <WiFi.h>
 #include <mbedtls/aes.h>
 #include "base64.h"
@@ -14,8 +16,9 @@
 #include <sys/time.h>
 #include <EEPROM.h> // include library to read and write from flash memory
 
-#define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
-#define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"    
+#define SERVICE_UUID           "6E400001-B5A3-F393-E0A9-E50E24DCCA9E" 
+#define CHARACTERISTIC_UUID_RX "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
+#define CHARACTERISTIC_UUID_TX "6E400003-B5A3-F393-E0A9-E50E24DCCA9E" 
 
 #define FACTOR 1000000  /* Conversion factor for micro seconds to seconds */
 #define TIME_TO_SLEEP  5        /* Time ESP32 will go to sleep (in seconds) */
@@ -31,6 +34,7 @@ mbedtls_aes_context aes;
  
 DHT dht(DHTPIN, DHTTYPE); // Instanciates DHT sensor with the data pin and the model of the sensor
 
+BLECharacteristic *pCharacteristic;
 
 int humidity;
 int temperature;
@@ -45,6 +49,8 @@ char cipheredText[16];
 struct tm data;//Cria a estrutura que contem as informacoes da data.
 
 int i = 0;
+
+bool deviceConnected = false;
 
 
 // Encryption using AES ECB algorithm with a 128 bit key
@@ -96,37 +102,42 @@ void performMeasurements()
 void initializeServer(char *output)
 {
 
-  BLEDevice::init("ESP32");
-  
+  // Create the BLE Device
+  BLEDevice::init("ESP32 DHT11"); // Give it a name
+ 
+  // Configura o dispositivo como Servidor BLE
   BLEServer *pServer = BLEDevice::createServer();
-  
+  pServer->setCallbacks(new MyServerCallbacks());
+ 
+  // Cria o servico UART
   BLEService *pService = pServer->createService(SERVICE_UUID);
-  
+ 
+  // Cria uma Característica BLE para envio dos dados
+  pCharacteristic = pService->createCharacteristic(
+                      CHARACTERISTIC_UUID_TX,
+                      BLECharacteristic::PROPERTY_NOTIFY
+                    );
+                       
+  pCharacteristic->addDescriptor(new BLE2902());
+ 
+  // cria uma característica BLE para recebimento dos dados
   BLECharacteristic *pCharacteristic = pService->createCharacteristic(
-                                         CHARACTERISTIC_UUID,
-                                         BLECharacteristic::PROPERTY_READ |
+                                         CHARACTERISTIC_UUID_RX,
                                          BLECharacteristic::PROPERTY_WRITE
                                        );
-
-  pCharacteristic->setValue(output);
-
+ 
+  pCharacteristic->setCallbacks(new MyCallbacks());
+ 
+  // Inicia o serviço
   pService->start();
-  
-  // BLEAdvertising *pAdvertising = pServer->getAdvertising();  // this still is working for backward compatibility
-  
-  BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
-  
-  pAdvertising->addServiceUUID(SERVICE_UUID);
-
-  pAdvertising->setScanResponse(true);
-  pAdvertising->setMinPreferred(0x06);  // functions that help with iPhone connections issue
-  pAdvertising->setMinPreferred(0x12);
-  
-  BLEDevice::startAdvertising();
+ 
+  // Inicia a descoberta do ESP32
+  pServer->getAdvertising()->start();
+  Serial.println("Esperando um cliente se conectar...");
 }
 
-void printMeasurements(){
-    
+void printMeasurements()
+{
     Serial.print("Temperature: ");
     Serial.println(temperature);
     Serial.print("Humidity: ");
@@ -210,6 +221,57 @@ void testingFlashMemory()
   temperature = readFromMemory(i);
 }
 
+void notifyClient()
+{
+    pCharacteristic->setValue(temperature);
+    pCharacteristic->notify(); // Envia o valor para o aplicativo!
+    Serial.print("*** Dado enviado: ");
+    Serial.print(temperature);
+    Serial.println(" ***");
+}
+
+class MyServerCallbacks: public BLEServerCallbacks {
+  
+  void onConnect(BLEServer* pServer) {
+      deviceConnected = true;
+    };
+    void onDisconnect(BLEServer* pServer) {
+      deviceConnected = false;
+    }
+};
+
+class MyCallbacks: public BLECharacteristicCallbacks 
+{
+      
+      void onWrite(BLECharacteristic *pCharacteristic) 
+      {
+        std::string rxValue = pCharacteristic->getValue();
+        
+        if (rxValue.length() > 0) 
+        {
+          Serial.println("*********");
+          Serial.print("Received Value: ");        
+          for (int i = 0; i < rxValue.length(); i++) 
+          {
+            Serial.print(rxValue[i]);
+          }
+          Serial.println();
+          // Do stuff based on the command received from the app
+          if (rxValue[0] == '1') 
+          {
+            Serial.print("Turning ON!");
+          }
+          else if (rxValue.find("B") != -1) 
+          {
+            Serial.print("Turning OFF!");
+          }
+          Serial.println();
+          Serial.println("*********");
+        }
+      }
+};
+
+
 void setup() 
 {
   
@@ -232,9 +294,15 @@ void setup()
 
 void loop() 
 {
+  if (deviceConnected) 
+  {
+    performMeasurements();
+    notifyClient();
+  }
   
-  delay(5000);
-  
+  delay(1000);
+
+/*  
   Serial.print(++i);
   
   inferCurrentDate();
@@ -244,7 +312,7 @@ void loop()
  // testingFlashMemory();
 
   printMeasurements();
-
+*/ 
 /*
   
   addPadding();
