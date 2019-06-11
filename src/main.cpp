@@ -99,7 +99,7 @@ void performMeasurements()
 
 }
 
-void initializeServer(char *output)
+void initializeServer()
 {
 
   // Create the BLE Device
@@ -281,6 +281,8 @@ void setup()
   dht.begin(); // Initialize sensor
   
   EEPROM.begin(EEPROM_SIZE); // initialize EEPROM with predefined size
+
+  initializeServer();
 
   bootCount++;
 
