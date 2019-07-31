@@ -52,6 +52,41 @@ int i = 0;
 
 bool deviceConnected = false;
 
+long receivedTimestamp;
+
+
+class MyServerCallbacks: public BLEServerCallbacks {
+  
+  void onConnect(BLEServer* pServer) {
+      deviceConnected = true;
+    };
+    void onDisconnect(BLEServer* pServer) {
+      deviceConnected = false;
+    }
+};
+
+class MyCallbacks: public BLECharacteristicCallbacks 
+{
+      
+      void onWrite(BLECharacteristic *pCharacteristic) 
+      {
+        std::string rxValue = pCharacteristic->getValue();
+        
+        if (rxValue.length() > 0) 
+        {
+          Serial.println("*********");
+          Serial.print("Received Value: ");        
+          for (int i = 0; i < rxValue.length(); i++) 
+          {
+            Serial.print(rxValue[i]);
+          }
+          Serial.println();
+        receivedTimestamp = atoi(rxValue.c_str);
+        Serial.println(receivedTimestamp);
+        }
+      }
+};
+
 
 // Encryption using AES ECB algorithm with a 128 bit key
 void encrypt(char * plainText, char * key, unsigned char * outputBuffer)
@@ -230,46 +265,7 @@ void notifyClient()
     Serial.println(" ***");
 }
 
-class MyServerCallbacks: public BLEServerCallbacks {
-  
-  void onConnect(BLEServer* pServer) {
-      deviceConnected = true;
-    };
-    void onDisconnect(BLEServer* pServer) {
-      deviceConnected = false;
-    }
-};
 
-class MyCallbacks: public BLECharacteristicCallbacks 
-{
-      
-      void onWrite(BLECharacteristic *pCharacteristic) 
-      {
-        std::string rxValue = pCharacteristic->getValue();
-        
-        if (rxValue.length() > 0) 
-        {
-          Serial.println("*********");
-          Serial.print("Received Value: ");        
-          for (int i = 0; i < rxValue.length(); i++) 
-          {
-            Serial.print(rxValue[i]);
-          }
-          Serial.println();
-          // Do stuff based on the command received from the app
-          if (rxValue[0] == '1') 
-          {
-            Serial.print("Turning ON!");
-          }
-          else if (rxValue.find("B") != -1) 
-          {
-            Serial.print("Turning OFF!");
-          }
-          Serial.println();
-          Serial.println("*********");
-        }
-      }
-};
 
 
 void setup() 
@@ -299,6 +295,7 @@ void loop()
   if (deviceConnected) 
   {
     performMeasurements();
+    printMeasurements();
     notifyClient();
   }
   
