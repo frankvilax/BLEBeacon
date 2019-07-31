@@ -81,8 +81,8 @@ class MyCallbacks: public BLECharacteristicCallbacks
             Serial.print(rxValue[i]);
           }
           Serial.println();
-        receivedTimestamp = atoi(rxValue.c_str);
-        Serial.println(receivedTimestamp);
+        //receivedTimestamp = atoi(rxValue);
+        //Serial.println(receivedTimestamp);
         }
       }
 };
